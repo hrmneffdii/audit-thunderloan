@@ -19,7 +19,7 @@ contract ThunderLoanTest is BaseTest {
         mockFlashLoanReceiver = new MockFlashLoanReceiver(address(thunderLoan));
     }
 
-    function testInitializationOwner() public {
+    function testInitializationOwner() public view {
         assertEq(thunderLoan.owner(), address(this));
     }
 

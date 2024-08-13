@@ -74,6 +74,11 @@ contract AssetToken is ERC20 {
     }
 
     function transferUnderlyingTo(address to, uint256 amount) external onlyThunderLoan {
+        // e be aware about ERC20s weirdness!
+        // q what happen if USDC blacklist the thunderloan contract??
+        // q what happen if USDC blacklist the asset tokens contract?
+        // @follow up, weird ERC20 with USDC
+        // @audit the protocol will be frozen
         i_underlying.safeTransfer(to, amount);
     }
 
@@ -86,6 +91,9 @@ contract AssetToken is ERC20 {
         // newExchangeRate = oldExchangeRate * (totalSupply + fee) / totalSupply
         // newExchangeRate = 1 (4 + 0.5) / 4
         // newExchangeRate = 1.125
+
+        // q what if the total supply equals 0?
+        // @audit gas to much read storage s_exchangesRate
         uint256 newExchangeRate = s_exchangeRate * (totalSupply() + fee) / totalSupply();
 
         if (newExchangeRate <= s_exchangeRate) {
