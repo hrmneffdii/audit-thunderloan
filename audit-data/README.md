@@ -16,7 +16,7 @@
 4. Download `eisvogel.latex` and add to your templates directory (should be `~/.pandoc/templates/`)
 5. Add your logo to the directory as a pdf named `logo.pdf`
 6. Run this command:
-```
+```bash
 pandoc report.md -o report.pdf --from markdown --template=eisvogel --listings
 ```
 
