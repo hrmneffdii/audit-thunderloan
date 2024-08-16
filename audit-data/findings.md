@@ -118,7 +118,7 @@ The test, following `ThunderLoanTest.t.sol::testUpgradeBreaks`
 
 </details>
 
-YOu can also see the storage layout difference by running `forge inspect ThunderLoan storage` and `forge inspect ThunderLoanUpgrade storage`
+You can also see the storage layout difference by running `forge inspect ThunderLoan storage` and `forge inspect ThunderLoanUpgrade storage`
 
 **Recommended mitigation**
 
@@ -159,3 +159,70 @@ Proof of code, following `ThuderLoanTest.t.sol::testOracleManipulation`.
 
 Consider using a different price oracle mechanism, like a chainlink price feed with a Uniswap TWAP fallback oracle.
 
+### [M-2] Centralization risk causes the owner using unfair token address
+
+**Description**
+
+The `ThunderLoan.sol::setAllowedToken` function is intended to set allowed token for conducting a thunderloan. However, only the owner has the ability to set a token as allowed.
+
+```javascript
+  function setAllowedToken(IERC20 token, bool allowed) external onlyOwner returns (AssetToken) {
+    ...
+  }
+```
+
+**Impact**
+
+If the owner has malicious intent, they could set an unfair token allowed.
+
+
+### [L-1] Empty Function Body - Consider commenting why
+
+```javascript
+// src/ThunerLoan.sol
+function _authorizeUpgrade(address newImplementation) internal override onlyOwner { }
+```
+### [L-2] Missing important event emissions
+
+**Description**
+
+When the `ThunderLoan::s_flashLoanFee` is updated, there is no event emitted.
+
+**Recommended mitigation**
+
+Create a emit event when the `ThunderLoan::s_flashLoanFee` is updated.
+
+```diff
++  event FlashLoanFeeUpdated(uint256 newFee);
+   .
+   .
+   function updateFlashLoanFee(uint256 newFee) external onlyOwner {
+        if (newFee > s_feePrecision) {
+            revert ThunderLoan__BadNewFee();
+        }
+        s_flashLoanFee = newFee;
++       emit FlashLoanFeeUpdated(newFee); 
+   }
+```
+
+### [I-1] Poor test coverage
+
+### [I-2] Not using __gap[50] for future storage collision mitigation
+
+### [G-1] Unnecessary SLOAD when using emit
+
+In `AssetToken.sol::updateExchangeRate`, we create new variable `newExchangeRate` as memory variable. However, the `emit` statement uses storage variable `s_exchangeRate` as a parameter instead of `newExchangeRate`. This can result in an unnecessary SLOAD. To avoid this, use the memory variable `newExchangeRate` rather than the storage variable `s_exchangeRate`.
+
+```diff
+    s_exchangeRate = newExchangeRate;
+-   emit ExchangeRateUpdated(s_exchangeRate);
++   emit ExchangeRateUpdated(newExchangeRate);
+```
+
+### [G-2] Using bools for storage incurs overhead
+
+Use uint256(1) and uint256(2) for true/false to avoid a Gwarmaccess (100 gas), and to avoid Gsset (20000 gas) when changing from ‘false’ to ‘true’, after having been ‘true’ in the past.
+
+```javascript
+    mapping(IERC20 token => bool currentlyFlashLoaning) private s_currentlyFlashLoaning;
+```

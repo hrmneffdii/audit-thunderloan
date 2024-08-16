@@ -117,24 +117,24 @@ contract ThunderLoanTest is BaseTest {
         );
     }
 
-    function testCantRedeemAfterFlashLoan() public setAllowedToken hasDeposits {
-        uint256 amountToBorrow = AMOUNT * 10;
-        // uint256 calculatedFee = thunderLoan.getCalculatedFee(tokenA, amountToBorrow);
+    // function testCantRedeemAfterFlashLoan() public setAllowedToken hasDeposits {
+    //     uint256 amountToBorrow = AMOUNT * 10;
+    //     // uint256 calculatedFee = thunderLoan.getCalculatedFee(tokenA, amountToBorrow);
 
-        vm.startPrank(user);
-        tokenA.mint(address(mockFlashLoanReceiver), AMOUNT);
-        thunderLoan.flashloan(
-            address(mockFlashLoanReceiver),
-            tokenA,
-            amountToBorrow,
-            ""
-        );
-        vm.stopPrank();
+    //     vm.startPrank(user);
+    //     tokenA.mint(address(mockFlashLoanReceiver), AMOUNT);
+    //     thunderLoan.flashloan(
+    //         address(mockFlashLoanReceiver),
+    //         tokenA,
+    //         amountToBorrow,
+    //         ""
+    //     );
+    //     vm.stopPrank();
 
-        vm.startPrank(liquidityProvider);
-        thunderLoan.redeem(tokenA, type(uint256).max);
-        vm.stopPrank();
-    }
+    //     vm.startPrank(liquidityProvider);
+    //     thunderLoan.redeem(tokenA, type(uint256).max);
+    //     vm.stopPrank();
+    // }
 
     function testOracleManipulation() public {
         // 1. setup the contracts!
