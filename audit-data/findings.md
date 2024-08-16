@@ -60,7 +60,6 @@ Remove the incorrectly update exchange rate lines from `deposit`.
         uint256 mintAmount = (amount * assetToken.EXCHANGE_RATE_PRECISION()) / exchangeRate;
         emit Deposit(msg.sender, token, amount);
         assetToken.mint(msg.sender, mintAmount);
-        // @audit high 
 -       uint256 calculatedFee = getCalculatedFee(token, amount);
 -       assetToken.updateExchangeRate(calculatedFee);
         token.safeTransferFrom(msg.sender, address(assetToken), amount);
@@ -132,6 +131,70 @@ If you want to avoid the the storage variable, leave it as blank as to not mess 
 +    uint256 public constant FEE_PRECISION = 1e18;
 ```
 
+### [H-3] By calling a flashloan and then `ThunderLoan::deposit` instead of `ThunderLoan::repay` users can steal all funds from the protocol
+
+**Description**
+
+The `ThunderLoan::flashLoan` function allows a user to borrow some funds and then repay them with fees. A way to repay not only using `ThunderLoan::repay` function, but also using `ThunderLoan::deposit` function. a checking for flashloaning is done through the total asset tokens. A normal case is when a user does flashloan and then repays the overall amount with a fee. However, an abnormal case is when a user does flashloan, and instead of repaying, a user deposits token to reduce the count of token for passing the check on the total asset tokens. Otherwise, a user can steal some funds through the remaining tokens from the deposit.
+
+**Impact**
+
+The impact is a user can charge a fee lower than expected. 
+
+**Proof of Concepts**
+
+1. A user takes a flashloan
+2. The user takes some funds (from the flashloan) and then makes deposit into the protocol
+3. Because of the deposit, the check on the total asset passes
+4. The user receive some remaining funds from deposits
+
+<details>
+
+<summary> PoC </summary>
+
+```javascript
+    function testUseDepositInsteadOfRepayToStealFunds()
+        public
+        setAllowedToken
+        hasDeposits
+    {
+        uint256 amountToBorrow = 50e18;
+        uint256 fee = thunderLoan.getCalculatedFee(tokenA, amountToBorrow);
+
+        vm.startPrank(user);
+        DepositOverRepay dor = new DepositOverRepay(address(thunderLoan));
+        tokenA.mint(address(dor), fee);
+        thunderLoan.flashloan(address(dor), tokenA, amountToBorrow, "");
+        dor.redeemMoney();
+        vm.stopPrank();
+
+        assert(tokenA.balanceOf(address(dor)) > amountToBorrow + fee);   
+    }
+```
+
+</details>
+
+**Recommended mitigation**
+
+The `ThunderLoan::deposit` function is recommended to using `s_flashloaning` check to avoid this problem. It has behavior with `ThunderLoan::repay` as well.
+
+```diff
+    function deposit(IERC20 token, uint256 amount) external revertIfZero(amount) revertIfNotAllowedToken(token) {
++       if (!s_currentlyFlashLoaning[token]) {
++           revert ThunderLoan__NotCurrentlyFlashLoaning();
++       }
+        AssetToken assetToken = s_tokenToAssetToken[token];
+        uint256 exchangeRate = assetToken.getExchangeRate();
+        uint256 mintAmount = (amount * assetToken.EXCHANGE_RATE_PRECISION()) / exchangeRate;
+        emit Deposit(msg.sender, token, amount);
+        assetToken.mint(msg.sender, mintAmount);
+
+        uint256 calculatedFee = getCalculatedFee(token, amount);
+        assetToken.updateExchangeRate(calculatedFee);
+      
+        token.safeTransferFrom(msg.sender, address(assetToken), amount);
+    }
+```
 
 ### [M-1] Using T-Swap as oracle leads to price and oracle manipulation attacks.
 
